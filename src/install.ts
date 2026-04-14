@@ -4,15 +4,13 @@ import { readLocalLock } from './local-lock.ts';
 import { runAdd } from './add.ts';
 import { runSync, parseSyncOptions } from './sync.ts';
 import { getUniversalAgents } from './agents.ts';
+import { applyInstalledSkills } from './apply.ts';
 
 /**
- * Install all skills from the local skills-lock.json.
- * Groups skills by source and calls `runAdd` for each group.
- *
- * Only installs to .agents/skills/ (universal agents) -- the canonical
- * project-level location. Does not install to agent-specific directories.
- *
- * node_modules skills are handled via experimental_sync.
+ * Restore all skills from the local skills-lock.json.
+ * Remote skills are installed into the central repository first, then
+ * applied to project-level universal agents. node_modules skills are handled
+ * via experimental_sync.
  */
 export async function runInstallFromLock(args: string[]): Promise<void> {
   const cwd = process.cwd();
@@ -27,7 +25,6 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
     return;
   }
 
-  // Only install to .agents/skills/ (universal agents)
   const universalAgentNames = getUniversalAgents();
 
   // Separate node_modules skills from remote skills
@@ -55,23 +52,33 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
   const remoteCount = skillEntries.length - nodeModuleSkills.length;
   if (remoteCount > 0) {
     p.log.info(
-      `Restoring ${pc.cyan(String(remoteCount))} skill${remoteCount !== 1 ? 's' : ''} from skills-lock.json into ${pc.dim('.agents/skills/')}`
+      `Restoring ${pc.cyan(String(remoteCount))} skill${remoteCount !== 1 ? 's' : ''} from skills-lock.json`
     );
   }
 
-  // Install remote skills grouped by source
+  const restoredSkillNames = new Set<string>();
+
   for (const [source, { skills }] of bySource) {
     try {
       await runAdd([source], {
         skill: skills,
-        agent: universalAgentNames,
         yes: true,
       });
+      for (const skill of skills) {
+        restoredSkillNames.add(skill);
+      }
     } catch (error) {
       p.log.error(
         `Failed to install from ${pc.cyan(source)}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  if (restoredSkillNames.size > 0) {
+    await applyInstalledSkills(Array.from(restoredSkillNames), {
+      agent: universalAgentNames,
+      yes: true,
+    });
   }
 
   // Handle node_modules skills via sync

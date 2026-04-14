@@ -428,7 +428,20 @@ describe('openclaw source blocking', () => {
   });
 
   it('should not block non-openclaw sources', () => {
-    const result = runCli(['add', 'vercel-labs/agent-skills', '--list'], testDir);
+    const localSkillDir = join(testDir, 'local-skill');
+    mkdirSync(localSkillDir, { recursive: true });
+    writeFileSync(
+      join(localSkillDir, 'SKILL.md'),
+      `---
+name: local-skill
+description: A local test skill
+---
+
+# Local Skill
+`
+    );
+
+    const result = runCli(['add', localSkillDir, '--list'], testDir);
     expect(result.stdout).not.toContain('--dangerously-accept-openclaw-risks');
     expect(result.stdout).not.toContain('Installation blocked');
   });

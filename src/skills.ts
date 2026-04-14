@@ -6,6 +6,12 @@ import { getPluginSkillPaths, getPluginGroupings } from './plugin-manifest.ts';
 
 const SKIP_DIRS = ['node_modules', '.git', 'dist', 'build', '__pycache__'];
 
+type SkillFrontmatter = {
+  name?: unknown;
+  description?: unknown;
+  metadata?: Record<string, unknown>;
+};
+
 /**
  * Check if internal skills should be installed.
  * Internal skills are hidden by default unless INSTALL_INTERNAL_SKILLS=1 is set.
@@ -32,30 +38,31 @@ export async function parseSkillMd(
   try {
     const content = await readFile(skillMdPath, 'utf-8');
     const { data } = parseFrontmatter(content);
+    const frontmatter = data as SkillFrontmatter;
 
-    if (!data.name || !data.description) {
+    if (!frontmatter.name || !frontmatter.description) {
       return null;
     }
 
     // Ensure name and description are strings (YAML can parse numbers, booleans, etc.)
-    if (typeof data.name !== 'string' || typeof data.description !== 'string') {
+    if (typeof frontmatter.name !== 'string' || typeof frontmatter.description !== 'string') {
       return null;
     }
 
     // Skip internal skills unless:
     // 1. INSTALL_INTERNAL_SKILLS=1 is set, OR
     // 2. includeInternal option is true (e.g., when user explicitly requests a skill)
-    const isInternal = data.metadata?.internal === true;
+    const isInternal = frontmatter.metadata?.internal === true;
     if (isInternal && !shouldInstallInternalSkills() && !options?.includeInternal) {
       return null;
     }
 
     return {
-      name: data.name,
-      description: data.description,
+      name: frontmatter.name,
+      description: frontmatter.description,
       path: dirname(skillMdPath),
       rawContent: content,
-      metadata: data.metadata,
+      metadata: frontmatter.metadata,
     };
   } catch {
     return null;

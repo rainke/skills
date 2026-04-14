@@ -11,13 +11,15 @@ describe('remove command', { timeout: 30000 }, () => {
   beforeEach(() => {
     testDir = join(tmpdir(), `skills-remove-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
+    process.env.XDG_CONFIG_HOME = testDir;
 
-    // Create .agents/skills directory (canonical location)
-    skillsDir = join(testDir, '.agents', 'skills');
+    // Create repository skills directory
+    skillsDir = join(testDir, 'skills');
     mkdirSync(skillsDir, { recursive: true });
   });
 
   afterEach(() => {
+    delete process.env.XDG_CONFIG_HOME;
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
@@ -50,10 +52,8 @@ This is a test skill.
     const skillPath = join(skillsDir, skillName);
     const linkPath = join(targetDir, skillName);
     try {
-      // Create relative symlink
-      const relativePath = join('..', '..', '.agents', 'skills', skillName);
       const { symlinkSync } = require('fs');
-      symlinkSync(relativePath, linkPath);
+      symlinkSync(skillPath, linkPath);
     } catch {
       // Skip if symlinks aren't supported
     }

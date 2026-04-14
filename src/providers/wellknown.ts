@@ -1,6 +1,12 @@
 import { parseFrontmatter } from '../frontmatter.ts';
 import type { HostProvider, ProviderMatch, RemoteSkill } from './types.ts';
 
+type WellKnownFrontmatter = {
+  name?: unknown;
+  description?: unknown;
+  metadata?: Record<string, unknown>;
+};
+
 /**
  * Represents the index.json structure for well-known skills.
  */
@@ -275,9 +281,10 @@ export class WellKnownProvider implements HostProvider {
 
       const content = await response.text();
       const { data } = parseFrontmatter(content);
+      const frontmatter = data as WellKnownFrontmatter;
 
       // Validate frontmatter has name and description
-      if (!data.name || !data.description) {
+      if (typeof frontmatter.name !== 'string' || typeof frontmatter.description !== 'string') {
         return null;
       }
 
@@ -309,12 +316,12 @@ export class WellKnownProvider implements HostProvider {
       }
 
       return {
-        name: data.name,
-        description: data.description,
+        name: frontmatter.name,
+        description: frontmatter.description,
         content,
         installName: entry.name,
         sourceUrl: skillMdUrl,
-        metadata: data.metadata,
+        metadata: frontmatter.metadata,
         files,
         indexEntry: entry,
       };

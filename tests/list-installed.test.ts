@@ -11,9 +11,11 @@ describe('listInstalledSkills', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `add-skill-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await mkdir(testDir, { recursive: true });
+    process.env.XDG_CONFIG_HOME = testDir;
   });
 
   afterEach(async () => {
+    delete process.env.XDG_CONFIG_HOME;
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -23,7 +25,27 @@ describe('listInstalledSkills', () => {
     skillName: string,
     skillData: { name: string; description: string }
   ): Promise<string> {
-    const skillDir = join(basePath, '.agents', 'skills', skillName);
+    const skillDir = join(basePath, 'skills', skillName);
+    await mkdir(skillDir, { recursive: true });
+    const skillMdContent = `---
+name: ${skillData.name}
+description: ${skillData.description}
+---
+
+# ${skillData.name}
+
+${skillData.description}
+`;
+    await writeFile(join(skillDir, 'SKILL.md'), skillMdContent);
+    return skillDir;
+  }
+
+  async function createAppliedSkillDir(
+    projectPath: string,
+    skillName: string,
+    skillData: { name: string; description: string }
+  ): Promise<string> {
+    const skillDir = join(projectPath, '.agents', 'skills', skillName);
     await mkdir(skillDir, { recursive: true });
     const skillMdContent = `---
 name: ${skillData.name}
@@ -79,7 +101,7 @@ ${skillData.description}
     });
 
     // Create a directory without SKILL.md
-    const invalidDir = join(testDir, '.agents', 'skills', 'invalid-skill');
+    const invalidDir = join(testDir, 'skills', 'invalid-skill');
     await mkdir(invalidDir, { recursive: true });
     await writeFile(join(invalidDir, 'other-file.txt'), 'content');
 
@@ -95,7 +117,7 @@ ${skillData.description}
     });
 
     // Create a directory with invalid SKILL.md (missing name/description)
-    const invalidDir = join(testDir, '.agents', 'skills', 'invalid-skill');
+    const invalidDir = join(testDir, 'skills', 'invalid-skill');
     await mkdir(invalidDir, { recursive: true });
     await writeFile(join(invalidDir, 'SKILL.md'), '# Invalid\nNo frontmatter');
 
@@ -146,7 +168,7 @@ ${skillData.description}
     // Mock: only Amp is installed (not Kimi, even though they share .agents/skills)
     vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['amp']);
 
-    await createSkillDir(testDir, 'test-skill', {
+    await createAppliedSkillDir(testDir, 'test-skill', {
       name: 'test-skill',
       description: 'Test skill',
     });
@@ -165,19 +187,10 @@ ${skillData.description}
   it('should find skills in agent-specific directories (issue #225)', async () => {
     vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['cursor']);
 
-    // Cursor now uses .agents/skills (universal directory)
-    const cursorSkillDir = join(testDir, '.agents', 'skills', 'cursor-skill');
-    await mkdir(cursorSkillDir, { recursive: true });
-    await writeFile(
-      join(cursorSkillDir, 'SKILL.md'),
-      `---
-name: cursor-skill
-description: A skill in cursor directory
----
-
-# cursor-skill
-`
-    );
+    await createAppliedSkillDir(testDir, 'cursor-skill', {
+      name: 'cursor-skill',
+      description: 'A skill in cursor directory',
+    });
 
     const skills = await listInstalledSkills({ global: false, cwd: testDir });
 

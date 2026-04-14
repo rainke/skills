@@ -67,9 +67,6 @@ export function parseListOptions(args: string[]): ListOptions {
 export async function runList(args: string[]): Promise<void> {
   const options = parseListOptions(args);
 
-  // Default to project only (local), use -g for global
-  const scope = options.global === true ? true : false;
-
   // Validate agent filter if provided
   let agentFilter: AgentType[] | undefined;
   if (options.agent && options.agent.length > 0) {
@@ -85,10 +82,46 @@ export async function runList(args: string[]): Promise<void> {
     agentFilter = options.agent as AgentType[];
   }
 
+  if (!agentFilter || agentFilter.length === 0) {
+    const lockedSkills = await getAllLockedSkills();
+    const skillNames = Object.keys(lockedSkills).sort();
+
+    if (options.json) {
+      console.log(
+        JSON.stringify(
+          skillNames.map((name) => ({
+            name,
+            source: lockedSkills[name]?.source,
+            sourceUrl: lockedSkills[name]?.sourceUrl,
+          })),
+          null,
+          2
+        )
+      );
+      return;
+    }
+
+    if (skillNames.length === 0) {
+      console.log(`${DIM}No installed skills found.${RESET}`);
+      return;
+    }
+
+    console.log(`${BOLD}Installed Skills${RESET}`);
+    console.log();
+    for (const name of skillNames) {
+      const entry = lockedSkills[name]!;
+      console.log(`${CYAN}${name}${RESET}`);
+      console.log(`  ${DIM}Source:${RESET} ${entry.source}`);
+    }
+    console.log();
+    return;
+  }
+
   const installedSkills = await listInstalledSkills({
-    global: scope,
+    global: options.global === true,
     agentFilter,
   });
+  const lockedSkills = await getAllLockedSkills();
 
   // JSON output mode: structured, no ANSI, untruncated agent lists
   if (options.json) {
@@ -102,11 +135,8 @@ export async function runList(args: string[]): Promise<void> {
     return;
   }
 
-  // Fetch lock entries to get plugin grouping info
-  const lockedSkills = await getAllLockedSkills();
-
   const cwd = process.cwd();
-  const scopeLabel = scope ? 'Global' : 'Project';
+  const scopeLabel = options.global ? 'Global' : 'Project';
 
   if (installedSkills.length === 0) {
     if (options.json) {
@@ -114,7 +144,7 @@ export async function runList(args: string[]): Promise<void> {
       return;
     }
     console.log(`${DIM}No ${scopeLabel.toLowerCase()} skills found.${RESET}`);
-    if (scope) {
+    if (options.global) {
       console.log(`${DIM}Try listing project skills without -g${RESET}`);
     } else {
       console.log(`${DIM}Try listing global skills with -g${RESET}`);

@@ -6,7 +6,9 @@ import { basename, join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import * as p from '@clack/prompts';
+import { xdgConfig } from 'xdg-basedir';
 import { runAdd, parseAddOptions, initTelemetry } from './add.ts';
+import { runApply, parseApplyOptions } from './apply.ts';
 import { runFind } from './find.ts';
 import { runInstallFromLock } from './install.ts';
 import { runList } from './list.ts';
@@ -77,6 +79,9 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx skills add ${DIM}<package>${RESET}        ${DIM}Add a new skill${RESET}`
   );
   console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills apply${RESET}                ${DIM}Apply installed skills${RESET}`
+  );
+  console.log(
     `  ${DIM}$${RESET} ${TEXT}npx skills remove${RESET}               ${DIM}Remove installed skills${RESET}`
   );
   console.log(
@@ -114,6 +119,7 @@ ${BOLD}Manage Skills:${RESET}
   add <package>        Add a skill package (alias: a)
                        e.g. vercel-labs/agent-skills
                             https://github.com/vercel-labs/agent-skills
+  apply                Apply installed skills to agents
   remove [skills]      Remove installed skills
   list, ls             List installed skills
   find [query]         Search for skills interactively
@@ -132,14 +138,23 @@ ${BOLD}Project:${RESET}
   experimental_sync    Sync skills from node_modules into agent directories
 
 ${BOLD}Add Options:${RESET}
-  -g, --global           Install skill globally (user-level) instead of project-level
-  -a, --agent <agents>   Specify agents to install to (use '*' for all agents)
+  -a, --agent <agents>   With --apply, specify agents to install to (use '*' for all agents)
   -s, --skill <skills>   Specify skill names to install (use '*' for all skills)
   -l, --list             List available skills in the repository without installing
   -y, --yes              Skip confirmation prompts
+  --apply                Apply the installed skills after adding them
+  --copy                 With --apply, copy files instead of symlinking
+  --all                  Shorthand for --skill '*' -y (and --agent '*' if --apply)
+  --full-depth           Search all subdirectories even when a root SKILL.md exists
+
+${BOLD}Apply Options:${RESET}
+  -g, --global           Apply to global agent directories (otherwise you'll be prompted)
+  -a, --agent <agents>   Specify agents to apply to (use '*' for all agents)
+  -s, --skill <skills>   Specify installed skill names to apply
+  --source <source>      Apply all installed skills from a source
+  -y, --yes              Skip confirmation prompts
   --copy                 Copy files instead of symlinking to agent directories
   --all                  Shorthand for --skill '*' --agent '*' -y
-  --full-depth           Search all subdirectories even when a root SKILL.md exists
 
 ${BOLD}Remove Options:${RESET}
   -g, --global           Remove from global scope
@@ -163,9 +178,9 @@ ${BOLD}Options:${RESET}
 
 ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills add vercel-labs/agent-skills
-  ${DIM}$${RESET} skills add vercel-labs/agent-skills -g
-  ${DIM}$${RESET} skills add vercel-labs/agent-skills --agent claude-code cursor
+  ${DIM}$${RESET} skills add vercel-labs/agent-skills --apply --agent codex
   ${DIM}$${RESET} skills add vercel-labs/agent-skills --skill pr-review commit
+  ${DIM}$${RESET} skills apply --skill pr-review --agent claude-code
   ${DIM}$${RESET} skills remove                        ${DIM}# interactive remove${RESET}
   ${DIM}$${RESET} skills remove web-design             ${DIM}# remove by name${RESET}
   ${DIM}$${RESET} skills rm --global frontend-design
@@ -285,9 +300,8 @@ Describe when this skill should be used.
 // Check and Update Commands
 // ============================================
 
-const AGENTS_DIR = '.agents';
-const LOCK_FILE = '.skill-lock.json';
-const CURRENT_LOCK_VERSION = 3; // Bumped from 2 to 3 for folder hash support
+const LOCK_FILE = 'skill-lock.json';
+const CURRENT_LOCK_VERSION = 4;
 
 interface SkillLockEntry {
   source: string;
@@ -307,11 +321,11 @@ interface SkillLockFile {
 }
 
 function getSkillLockPath(): string {
-  const xdgStateHome = process.env.XDG_STATE_HOME;
-  if (xdgStateHome) {
-    return join(xdgStateHome, 'skills', LOCK_FILE);
-  }
-  return join(homedir(), AGENTS_DIR, LOCK_FILE);
+  return join(
+    process.env.XDG_CONFIG_HOME?.trim() || xdgConfig || join(homedir(), '.config'),
+    'skills',
+    LOCK_FILE
+  );
 }
 
 function readSkillLock(): SkillLockFile {
@@ -556,7 +570,7 @@ function printSkippedSkills(skipped: SkippedSkill[]): void {
       const names = skills.map((s) => s.name).join(', ');
       console.log(`  ${TEXT}•${RESET} ${names} ${DIM}(${reason})${RESET}`);
     }
-    console.log(`    ${DIM}To update: ${TEXT}npx skills add ${source} -g -y${RESET}`);
+    console.log(`    ${DIM}To update: ${TEXT}npx skills add ${source} -y${RESET}`);
   }
 }
 
@@ -596,8 +610,8 @@ async function updateGlobalSkills(
 
   if (skillNames.length === 0) {
     if (!skillFilter) {
-      console.log(`${DIM}No global skills tracked in lock file.${RESET}`);
-      console.log(`${DIM}Install skills with${RESET} ${TEXT}npx skills add <package> -g${RESET}`);
+      console.log(`${DIM}No installed skills tracked in lock file.${RESET}`);
+      console.log(`${DIM}Install skills with${RESET} ${TEXT}npx skills add <package>${RESET}`);
     }
     return { successCount, failCount, checkedCount: 0 };
   }
@@ -686,7 +700,7 @@ async function updateGlobalSkills(
       );
       continue;
     }
-    const result = spawnSync(process.execPath, [cliEntry, 'add', installUrl, '-g', '-y'], {
+    const result = spawnSync(process.execPath, [cliEntry, 'add', installUrl, '-y'], {
       stdio: ['inherit', 'pipe', 'pipe'],
       encoding: 'utf-8',
       shell: process.platform === 'win32',
@@ -874,6 +888,12 @@ async function main(): Promise<void> {
       showLogo();
       const { source: addSource, options: addOpts } = parseAddOptions(restArgs);
       await runAdd(addSource, addOpts);
+      break;
+    }
+    case 'apply': {
+      showLogo();
+      const applyOpts = parseApplyOptions(restArgs);
+      await runApply(restArgs, applyOpts);
       break;
     }
     case 'remove':

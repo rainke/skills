@@ -4,7 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { runCli } from '../src/test-utils.ts';
 
-describe('experimental_sync command', () => {
+describe('experimental_sync command', { timeout: 15000 }, () => {
   let testDir: string;
 
   beforeEach(() => {

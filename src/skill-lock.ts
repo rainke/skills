@@ -3,10 +3,10 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
 import { execSync } from 'child_process';
+import { xdgConfig } from 'xdg-basedir';
 
-const AGENTS_DIR = '.agents';
-const LOCK_FILE = '.skill-lock.json';
-const CURRENT_VERSION = 3; // Bumped from 2 to 3 for folder hash support (GitHub tree SHA)
+const LOCK_FILE = 'skill-lock.json';
+const CURRENT_VERSION = 4;
 
 /**
  * Represents a single installed skill entry in the lock file.
@@ -59,16 +59,12 @@ export interface SkillLockFile {
 }
 
 /**
- * Get the path to the global skill lock file.
- * Use $XDG_STATE_HOME/skills/.skill-lock.json if set.
- * otherwise fall back to ~/.agents/.skill-lock.json
+ * Get the path to the repository skill lock file.
+ * Uses $XDG_CONFIG_HOME/skills/skill-lock.json (via xdg-basedir) or ~/.config/skills/skill-lock.json.
  */
 export function getSkillLockPath(): string {
-  const xdgStateHome = process.env.XDG_STATE_HOME;
-  if (xdgStateHome) {
-    return join(xdgStateHome, 'skills', LOCK_FILE);
-  }
-  return join(homedir(), AGENTS_DIR, LOCK_FILE);
+  const configHome = process.env.XDG_CONFIG_HOME?.trim() || xdgConfig || join(homedir(), '.config');
+  return join(configHome, 'skills', LOCK_FILE);
 }
 
 /**
@@ -89,7 +85,6 @@ export async function readSkillLock(): Promise<SkillLockFile> {
     }
 
     // If old version, wipe and start fresh (backwards incompatible change)
-    // v3 adds skillFolderHash - we want fresh installs to populate it
     if (parsed.version < CURRENT_VERSION) {
       return createEmptyLockFile();
     }

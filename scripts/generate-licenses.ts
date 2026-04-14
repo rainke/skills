@@ -38,14 +38,8 @@ function getLicenseText(pkgPath: string): string {
   return '';
 }
 
-function main() {
-  console.log('Generating ThirdPartyNoticeText.txt...');
-
-  // Get license info from license-checker
-  const output = execSync('npx license-checker --json', { encoding: 'utf-8' });
-  const allLicenses: Record<string, LicenseInfo> = JSON.parse(output);
-
-  const lines: string[] = [
+function createNoticeHeader(): string[] {
+  return [
     '/*!----------------- Skills CLI ThirdPartyNotices -------------------------------------------------------',
     '',
     'The Skills CLI incorporates third party material from the projects listed below.',
@@ -57,6 +51,31 @@ function main() {
     '--------------------------------------------',
     '',
   ];
+}
+
+function loadLicenseInfo(): Record<string, LicenseInfo> {
+  const commands = ['pnpm exec license-checker --json', 'npx --yes license-checker --json'];
+
+  for (const command of commands) {
+    try {
+      const output = execSync(command, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      return JSON.parse(output) as Record<string, LicenseInfo>;
+    } catch {
+      // Try the next option.
+    }
+  }
+
+  console.warn(
+    'Warning: could not run license-checker; generating a minimal ThirdPartyNoticeText.txt'
+  );
+  return {};
+}
+
+function main() {
+  console.log('Generating ThirdPartyNoticeText.txt...');
+
+  const allLicenses = loadLicenseInfo();
+  const lines: string[] = createNoticeHeader();
 
   for (const [pkgNameVersion, info] of Object.entries(allLicenses)) {
     // Extract package name (remove version)

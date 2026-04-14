@@ -4,12 +4,12 @@ import { readdir, rm, lstat } from 'fs/promises';
 import { join } from 'path';
 import { agents, detectInstalledAgents } from './agents.ts';
 import { track } from './telemetry.ts';
-import { removeSkillFromLock, getSkillFromLock } from './skill-lock.ts';
+import { getAllLockedSkills, removeSkillFromLock, getSkillFromLock } from './skill-lock.ts';
 import type { AgentType } from './types.ts';
 import {
   getInstallPath,
-  getCanonicalPath,
-  getCanonicalSkillsDir,
+  getRepositorySkillPath,
+  getRepositorySkillsDir,
   sanitizeName,
 } from './installer.ts';
 
@@ -21,7 +21,6 @@ export interface RemoveOptions {
 }
 
 export async function removeCommand(skillNames: string[], options: RemoveOptions) {
-  const isGlobal = options.global ?? false;
   const cwd = process.cwd();
 
   const spinner = p.spinner();
@@ -44,19 +43,11 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
     }
   };
 
-  if (isGlobal) {
-    await scanDir(getCanonicalSkillsDir(true, cwd));
-    for (const agent of Object.values(agents)) {
-      if (agent.globalSkillsDir !== undefined) {
-        await scanDir(agent.globalSkillsDir);
-      }
-    }
-  } else {
-    await scanDir(getCanonicalSkillsDir(false, cwd));
-    for (const agent of Object.values(agents)) {
-      await scanDir(join(cwd, agent.skillsDir));
-    }
+  const lockedSkills = await getAllLockedSkills();
+  for (const skillName of Object.keys(lockedSkills)) {
+    skillNamesSet.add(skillName);
   }
+  await scanDir(getRepositorySkillsDir());
 
   const installedSkills = Array.from(skillNamesSet).sort();
   spinner.stop(`Found ${installedSkills.length} unique installed skill(s)`);
@@ -141,6 +132,10 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
   spinner.start('Removing skills...');
 
+  // Removing a repository-installed skill should clean up all agent links/copies,
+  // regardless of which agents were explicitly specified.
+  const cleanupAgents = Object.keys(agents) as AgentType[];
+
   const results: {
     skill: string;
     success: boolean;
@@ -151,22 +146,18 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
   for (const skillName of selectedSkills) {
     try {
-      const canonicalPath = getCanonicalPath(skillName, { global: isGlobal, cwd });
+      const canonicalPath = getRepositorySkillPath(skillName);
 
-      for (const agentKey of targetAgents) {
+      for (const agentKey of cleanupAgents) {
         const agent = agents[agentKey];
-        const skillPath = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
-
-        // Determine potential paths to cleanup. For universal agents, getInstallPath
-        // now returns the canonical path, so we also need to check their 'native'
-        // directory to clean up any legacy symlinks.
-        const pathsToCleanup = new Set([skillPath]);
+        const pathsToCleanup = new Set<string>();
         const sanitizedName = sanitizeName(skillName);
-        if (isGlobal && agent.globalSkillsDir) {
+        if (agent.globalSkillsDir) {
           pathsToCleanup.add(join(agent.globalSkillsDir, sanitizedName));
-        } else {
-          pathsToCleanup.add(join(cwd, agent.skillsDir, sanitizedName));
         }
+        pathsToCleanup.add(join(cwd, agent.skillsDir, sanitizedName));
+        pathsToCleanup.add(getInstallPath(skillName, agentKey, { global: true, cwd }));
+        pathsToCleanup.add(getInstallPath(skillName, agentKey, { global: false, cwd }));
 
         for (const pathToCleanup of pathsToCleanup) {
           // Skip if this is the canonical path - we'll handle that after checking all agents
@@ -191,30 +182,13 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
       // Only remove the canonical path if no other installed agents are using it.
       // This prevents breaking other agents when uninstalling from a specific agent (#287).
-      const installedAgents = await detectInstalledAgents();
-      const remainingAgents = installedAgents.filter((a) => !targetAgents.includes(a));
+      await rm(canonicalPath, { recursive: true, force: true });
 
-      let isStillUsed = false;
-      for (const agentKey of remainingAgents) {
-        const path = getInstallPath(skillName, agentKey, { global: isGlobal, cwd });
-        const exists = await lstat(path).catch(() => null);
-        if (exists) {
-          isStillUsed = true;
-          break;
-        }
-      }
-
-      if (!isStillUsed) {
-        await rm(canonicalPath, { recursive: true, force: true });
-      }
-
-      const lockEntry = isGlobal ? await getSkillFromLock(skillName) : null;
+      const lockEntry = await getSkillFromLock(skillName);
       const effectiveSource = lockEntry?.source || 'local';
       const effectiveSourceType = lockEntry?.sourceType || 'local';
 
-      if (isGlobal) {
-        await removeSkillFromLock(skillName);
-      }
+      await removeSkillFromLock(skillName);
 
       results.push({
         skill: skillName,
@@ -254,7 +228,6 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
         source,
         skills: data.skills.join(','),
         agents: targetAgents.join(','),
-        ...(isGlobal && { global: '1' }),
         sourceType: data.sourceType,
       });
     }

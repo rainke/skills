@@ -79,7 +79,7 @@ skills apply
 2. If `--skill` not specified, interactively select which skills to apply
 3. If `--agent` not specified, interactively select target agents
 4. For each (skill, agent) pair: create symlink or copy to agent's skillsDir
-5. Update the relevant lock file (global or project-level)
+5. Do not write an apply-side lock file; the applied state is derived from the actual agent directories
 
 ## Data Structures
 
@@ -187,10 +187,6 @@ For each (skill, agent) pair:
     (e.g., ~/.claude/skills/<skill-name> → ~/.config/skills/<skill-name>)
   │
   ▼
-Update agent-side lock file
-(global ~/.agents/.skill-lock.json or project skills-lock.json)
-  │
-  ▼
 Done
 ```
 
@@ -216,22 +212,22 @@ Done
 ### Key implementation details
 
 1. **Symlink target change**: symlinks point from agent directory → `~/.config/skills/<name>` instead of `~/.agents/skills/<name>`
-2. **Apply-side lock file**: apply writes to the existing agent-side lock files (`~/.agents/.skill-lock.json` for global, `skills-lock.json` for project). These lock files track which skills are applied to which agents, recording the source, hash, and path info so that `skills update` and `skills remove` can work correctly. The format remains compatible with the current lock file structure for the applied entries.
-3. **Add no longer writes agent lock files**: add only writes `~/.config/skills/skill-lock.json`
-4. **Two distinct lock files**: `~/.config/skills/skill-lock.json` (the "repository" lock) tracks what's installed; agent-side lock files track what's applied to each context. These are separate concerns.
+2. **Repository lock is the only lock file**: `~/.config/skills/skill-lock.json` tracks installed skills, their sources, refs, and hashes. It is the only metadata store required for add/update/remove.
+3. **Applied state comes from the filesystem**: whether a skill is applied to an agent is determined by scanning the agent's skills directory for symlinks/copies, not by consulting a second lock file.
+4. **Add no longer writes agent-side metadata**: add only writes `~/.config/skills/skill-lock.json`; apply only creates or updates files in agent directories.
 
 ## Affected Existing Features
 
 ### `skills remove`
 
 - Remove skill files from `~/.config/skills/<name>/` and update `~/.config/skills/skill-lock.json`
-- Automatically clean up symlinks in all agent directories pointing to the removed skill
+- Automatically scan agent directories and clean up symlinks/copies pointing to the removed skill
 - Consider adding `skills unapply` (or `skills remove --unapply-only`): only remove agent symlinks but keep skill in `~/.config/skills`
 
 ### `skills list`
 
 - Default: list all installed skills from `~/.config/skills/skill-lock.json`
-- `--agent <agent>`: list skills applied to a specific agent
+- `--agent <agent>`: list skills applied to a specific agent by scanning that agent's skills directory
 - Or differentiate via subcommand: `skills list` vs `skills list --applied`
 
 ### `skills update`
@@ -239,6 +235,7 @@ Done
 - Check for new versions of skills in `~/.config/skills/skill-lock.json`
 - Update files in `~/.config/skills/<name>/` and the lock file
 - After update, do not automatically re-apply; support `--apply` flag
+- With `--apply`, determine current applications by scanning agent directories and re-apply only where the skill is already present
 
 ### `skills experimental_install`
 
@@ -280,7 +277,7 @@ Done
 - `src/cli.ts` — register `apply` subcommand
 - `src/remove.ts` — adjust to use new paths
 - `src/list.ts` — adjust to show skills from new lock file by default
-- `src/local-lock.ts` — adjust apply-side lock file tracking
+- `src/local-lock.ts` — adjust any project-level restore/apply integration that previously assumed add wrote local applied state
 
 ### Shared functions
 - Skill discovery, source parsing, git clone — unchanged, shared between add and apply

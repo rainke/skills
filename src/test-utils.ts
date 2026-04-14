@@ -3,6 +3,7 @@ import { join } from 'path';
 
 // const PROJECT_ROOT = join(import.meta.dirname, '..');
 const CLI_PATH = join(import.meta.dirname, 'cli.ts');
+const NODE_TS_FLAGS = '--experimental-strip-types';
 
 export function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*m/g, '');
@@ -27,7 +28,7 @@ export function runCli(
   timeout?: number
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const output = execSync(`node "${CLI_PATH}" ${args.join(' ')}`, {
+    const output = execSync(`node ${NODE_TS_FLAGS} "${CLI_PATH}" ${args.join(' ')}`, {
       encoding: 'utf-8',
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -36,9 +37,11 @@ export function runCli(
     });
     return { stdout: stripAnsi(output), stderr: '', exitCode: 0 };
   } catch (error: any) {
+    const stdout = stripAnsi(error.stdout || '');
+    const stderr = stripAnsi(error.stderr || '');
     return {
-      stdout: stripAnsi(error.stdout || ''),
-      stderr: stripAnsi(error.stderr || ''),
+      stdout: stdout || stderr,
+      stderr,
       exitCode: error.status || 1,
     };
   }
@@ -55,7 +58,7 @@ export function runCliWithInput(
   cwd?: string
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const output = execSync(`node "${CLI_PATH}" ${args.join(' ')}`, {
+    const output = execSync(`node ${NODE_TS_FLAGS} "${CLI_PATH}" ${args.join(' ')}`, {
       encoding: 'utf-8',
       cwd,
       input: input + '\n',
@@ -63,9 +66,11 @@ export function runCliWithInput(
     });
     return { stdout: stripAnsi(output), stderr: '', exitCode: 0 };
   } catch (error: any) {
+    const stdout = stripAnsi(error.stdout || '');
+    const stderr = stripAnsi(error.stderr || '');
     return {
-      stdout: stripAnsi(error.stdout || ''),
-      stderr: stripAnsi(error.stderr || ''),
+      stdout: stdout || stderr,
+      stderr,
       exitCode: error.status || 1,
     };
   }

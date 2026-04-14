@@ -1,23 +1,90 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, rmSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, rmSync, mkdirSync, writeFileSync, symlinkSync } from 'fs';
 import { join } from 'path';
-import { tmpdir, homedir } from 'os';
+import { tmpdir } from 'os';
 import { runCli } from './test-utils.ts';
 import { parseListOptions } from './list.ts';
 
 describe('list command', () => {
   let testDir: string;
+  let repositoryDir: string;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `skills-list-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
+    process.env.XDG_CONFIG_HOME = testDir;
+    repositoryDir = join(testDir, 'skills');
+    mkdirSync(repositoryDir, { recursive: true });
   });
 
   afterEach(() => {
+    delete process.env.XDG_CONFIG_HOME;
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
   });
+
+  function writeLock(skills: Record<string, { source: string; sourceUrl?: string }>) {
+    const lockPath = join(repositoryDir, 'skill-lock.json');
+    const now = new Date().toISOString();
+    writeFileSync(
+      lockPath,
+      JSON.stringify(
+        {
+          version: 4,
+          skills: Object.fromEntries(
+            Object.entries(skills).map(([name, entry]) => [
+              name,
+              {
+                source: entry.source,
+                sourceType: 'github',
+                sourceUrl: entry.sourceUrl ?? `https://github.com/${entry.source}`,
+                skillFolderHash: 'test-hash',
+                installedAt: now,
+                updatedAt: now,
+              },
+            ])
+          ),
+        },
+        null,
+        2
+      )
+    );
+  }
+
+  function writeRepositorySkill(name: string, description: string = `${name} description`) {
+    const skillDir = join(repositoryDir, name);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`
+    );
+  }
+
+  function writeAgentSkill(
+    agentDir: string,
+    name: string,
+    description: string = `${name} description`
+  ) {
+    const skillDir = join(testDir, agentDir, 'skills', name);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`
+    );
+  }
 
   describe('parseListOptions', () => {
     it('should parse empty args', () => {
@@ -77,14 +144,13 @@ describe('list command', () => {
   describe('CLI integration', () => {
     it('should run list command', () => {
       const result = runCli(['list'], testDir);
-      // Empty project dir shows "No project skills found"
-      expect(result.stdout).toContain('No project skills found');
+      expect(result.stdout).toContain('No installed skills found.');
       expect(result.exitCode).toBe(0);
     });
 
     it('should run ls alias', () => {
       const result = runCli(['ls'], testDir);
-      expect(result.stdout).toContain('No project skills found');
+      expect(result.stdout).toContain('No installed skills found.');
       expect(result.exitCode).toBe(0);
     });
 
@@ -96,18 +162,12 @@ describe('list command', () => {
     });
 
     it('should output valid JSON with --json flag', () => {
-      const skillDir = join(testDir, '.agents', 'skills', 'json-skill');
-      mkdirSync(skillDir, { recursive: true });
-      writeFileSync(
-        join(skillDir, 'SKILL.md'),
-        `---
-name: json-skill
-description: A skill for JSON testing
----
-
-# JSON Skill
-`
-      );
+      writeRepositorySkill('json-skill', 'A skill for JSON testing');
+      writeLock({
+        'json-skill': {
+          source: 'acme/json-skills',
+        },
+      });
 
       const result = runCli(['list', '--json'], testDir);
       expect(result.exitCode).toBe(0);
@@ -115,27 +175,19 @@ description: A skill for JSON testing
       expect(Array.isArray(parsed)).toBe(true);
       expect(parsed.length).toBe(1);
       expect(parsed[0].name).toBe('json-skill');
-      expect(parsed[0].path).toContain('json-skill');
-      expect(parsed[0].scope).toBe('project');
-      expect(Array.isArray(parsed[0].agents)).toBe(true);
+      expect(parsed[0].source).toBe('acme/json-skills');
+      expect(parsed[0].sourceUrl).toContain('acme/json-skills');
       // No ANSI codes in JSON output
       expect(result.stdout).not.toMatch(/\x1b\[/);
     });
 
     it('should output multiple skills as JSON array', () => {
-      const skill1Dir = join(testDir, '.agents', 'skills', 'skill-alpha');
-      const skill2Dir = join(testDir, '.agents', 'skills', 'skill-beta');
-      mkdirSync(skill1Dir, { recursive: true });
-      mkdirSync(skill2Dir, { recursive: true });
-
-      writeFileSync(
-        join(skill1Dir, 'SKILL.md'),
-        `---\nname: skill-alpha\ndescription: Alpha\n---\n# Alpha\n`
-      );
-      writeFileSync(
-        join(skill2Dir, 'SKILL.md'),
-        `---\nname: skill-beta\ndescription: Beta\n---\n# Beta\n`
-      );
+      writeRepositorySkill('skill-alpha', 'Alpha');
+      writeRepositorySkill('skill-beta', 'Beta');
+      writeLock({
+        'skill-alpha': { source: 'acme/alpha-skills' },
+        'skill-beta': { source: 'acme/beta-skills' },
+      });
 
       const result = runCli(['list', '--json'], testDir);
       expect(result.exitCode).toBe(0);
@@ -148,88 +200,46 @@ description: A skill for JSON testing
 
     it('should show message when no project skills found', () => {
       const result = runCli(['list'], testDir);
-      expect(result.stdout).toContain('No project skills found');
-      expect(result.stdout).toContain('Try listing global skills with -g');
+      expect(result.stdout).toContain('No installed skills found.');
       expect(result.exitCode).toBe(0);
     });
 
-    it('should list project skills', () => {
-      // Create a skill in the canonical location
-      const skillDir = join(testDir, '.agents', 'skills', 'test-skill');
-      mkdirSync(skillDir, { recursive: true });
-      writeFileSync(
-        join(skillDir, 'SKILL.md'),
-        `---
-name: test-skill
-description: A test skill for listing
----
-
-# Test Skill
-
-This is a test skill.
-`
-      );
+    it('should list installed skills from the repository lock', () => {
+      writeRepositorySkill('test-skill', 'A test skill for listing');
+      writeLock({
+        'test-skill': { source: 'acme/test-skills' },
+      });
 
       const result = runCli(['list'], testDir);
       expect(result.stdout).toContain('test-skill');
-      expect(result.stdout).toContain('Project Skills');
-      // Description should not be shown
-      expect(result.stdout).not.toContain('A test skill for listing');
+      expect(result.stdout).toContain('Installed Skills');
+      expect(result.stdout).toContain('acme/test-skills');
       expect(result.exitCode).toBe(0);
     });
 
-    it('should list multiple skills', () => {
-      // Create multiple skills
-      const skill1Dir = join(testDir, '.agents', 'skills', 'skill-one');
-      const skill2Dir = join(testDir, '.agents', 'skills', 'skill-two');
-      mkdirSync(skill1Dir, { recursive: true });
-      mkdirSync(skill2Dir, { recursive: true });
-
-      writeFileSync(
-        join(skill1Dir, 'SKILL.md'),
-        `---
-name: skill-one
-description: First skill
----
-# Skill One
-`
-      );
-
-      writeFileSync(
-        join(skill2Dir, 'SKILL.md'),
-        `---
-name: skill-two
-description: Second skill
----
-# Skill Two
-`
-      );
+    it('should list multiple installed skills from the lock', () => {
+      writeRepositorySkill('skill-one', 'First skill');
+      writeRepositorySkill('skill-two', 'Second skill');
+      writeLock({
+        'skill-one': { source: 'acme/one' },
+        'skill-two': { source: 'acme/two' },
+      });
 
       const result = runCli(['list'], testDir);
       expect(result.stdout).toContain('skill-one');
       expect(result.stdout).toContain('skill-two');
-      expect(result.stdout).toContain('Project Skills');
+      expect(result.stdout).toContain('Installed Skills');
       expect(result.exitCode).toBe(0);
     });
 
-    it('should respect -g flag for global only', () => {
-      // Create a project skill (should not be shown with -g)
-      const skillDir = join(testDir, '.agents', 'skills', 'project-skill');
-      mkdirSync(skillDir, { recursive: true });
-      writeFileSync(
-        join(skillDir, 'SKILL.md'),
-        `---
-name: project-skill
-description: A project skill
----
-# Project Skill
-`
-      );
-
+    it('should still list installed skills when -g is provided without an agent filter', () => {
+      writeRepositorySkill('installed-skill', 'Installed skill');
+      writeLock({
+        'installed-skill': { source: 'acme/repo' },
+      });
       const result = runCli(['list', '-g'], testDir);
-      // Should not show project skill when -g is specified
-      expect(result.stdout).not.toContain('project-skill');
-      expect(result.stdout).toContain('Global Skills');
+      expect(result.stdout).toContain('Installed Skills');
+      expect(result.stdout).toContain('installed-skill');
     });
 
     it('should show error for invalid agent filter', () => {
@@ -240,90 +250,46 @@ description: A project skill
     });
 
     it('should filter by valid agent', () => {
-      // Create a skill
-      const skillDir = join(testDir, '.agents', 'skills', 'test-skill');
-      mkdirSync(skillDir, { recursive: true });
-      writeFileSync(
-        join(skillDir, 'SKILL.md'),
-        `---
-name: test-skill
-description: A test skill
----
-# Test Skill
-`
-      );
+      writeRepositorySkill('test-skill', 'A test skill');
+      const repoSkillDir = join(repositoryDir, 'test-skill');
+      mkdirSync(join(testDir, '.claude', 'skills'), { recursive: true });
+      symlinkSync(repoSkillDir, join(testDir, '.claude', 'skills', 'test-skill'));
 
       const result = runCli(['list', '-a', 'claude-code'], testDir);
       expect(result.stdout).toContain('test-skill');
+      expect(result.stdout).toContain('Project Skills');
       expect(result.exitCode).toBe(0);
     });
 
     it('should ignore directories without SKILL.md', () => {
-      // Create a valid skill
-      const validDir = join(testDir, '.agents', 'skills', 'valid-skill');
-      mkdirSync(validDir, { recursive: true });
-      writeFileSync(
-        join(validDir, 'SKILL.md'),
-        `---
-name: valid-skill
-description: Valid skill
----
-# Valid
-`
-      );
-
-      // Create an invalid directory (no SKILL.md)
-      const invalidDir = join(testDir, '.agents', 'skills', 'invalid-skill');
+      writeAgentSkill('.claude', 'valid-skill', 'Valid skill');
+      const invalidDir = join(testDir, '.claude', 'skills', 'invalid-skill');
       mkdirSync(invalidDir, { recursive: true });
       writeFileSync(join(invalidDir, 'README.md'), '# Not a skill');
 
-      const result = runCli(['list'], testDir);
+      const result = runCli(['list', '-a', 'claude-code'], testDir);
       expect(result.stdout).toContain('valid-skill');
       expect(result.stdout).not.toContain('invalid-skill');
       expect(result.exitCode).toBe(0);
     });
 
     it('should handle SKILL.md with missing frontmatter', () => {
-      // Create a valid skill
-      const validDir = join(testDir, '.agents', 'skills', 'valid-skill');
-      mkdirSync(validDir, { recursive: true });
-      writeFileSync(
-        join(validDir, 'SKILL.md'),
-        `---
-name: valid-skill
-description: Valid skill
----
-# Valid
-`
-      );
-
-      // Create a skill with invalid SKILL.md (no frontmatter)
-      const invalidDir = join(testDir, '.agents', 'skills', 'invalid-skill');
+      writeAgentSkill('.claude', 'valid-skill', 'Valid skill');
+      const invalidDir = join(testDir, '.claude', 'skills', 'invalid-skill');
       mkdirSync(invalidDir, { recursive: true });
       writeFileSync(join(invalidDir, 'SKILL.md'), '# Invalid\nNo frontmatter here');
 
-      const result = runCli(['list'], testDir);
+      const result = runCli(['list', '-a', 'claude-code'], testDir);
       expect(result.stdout).toContain('valid-skill');
       expect(result.stdout).not.toContain('invalid-skill');
       expect(result.exitCode).toBe(0);
     });
 
     it('should show skill path', () => {
-      const skillDir = join(testDir, '.agents', 'skills', 'test-skill');
-      mkdirSync(skillDir, { recursive: true });
-      writeFileSync(
-        join(skillDir, 'SKILL.md'),
-        `---
-name: test-skill
-description: A test skill
----
-# Test Skill
-`
-      );
+      writeAgentSkill('.claude', 'test-skill', 'A test skill');
 
-      const result = runCli(['list'], testDir);
-      // Path is shown inline with skill name (handles both Unix / and Windows \)
-      expect(result.stdout).toMatch(/\.agents[/\\]skills[/\\]test-skill/);
+      const result = runCli(['list', '-a', 'claude-code'], testDir);
+      expect(result.stdout).toMatch(/\.claude[/\\]skills[/\\]test-skill/);
     });
   });
 
