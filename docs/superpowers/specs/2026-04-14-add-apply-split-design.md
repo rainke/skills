@@ -216,8 +216,9 @@ Done
 ### Key implementation details
 
 1. **Symlink target change**: symlinks point from agent directory → `~/.config/skills/<name>` instead of `~/.agents/skills/<name>`
-2. **Apply-side lock file**: apply writes to agent-side lock files (tracking which skills are applied to which agents), not the skills repository lock file
+2. **Apply-side lock file**: apply writes to the existing agent-side lock files (`~/.agents/.skill-lock.json` for global, `skills-lock.json` for project). These lock files track which skills are applied to which agents, recording the source, hash, and path info so that `skills update` and `skills remove` can work correctly. The format remains compatible with the current lock file structure for the applied entries.
 3. **Add no longer writes agent lock files**: add only writes `~/.config/skills/skill-lock.json`
+4. **Two distinct lock files**: `~/.config/skills/skill-lock.json` (the "repository" lock) tracks what's installed; agent-side lock files track what's applied to each context. These are separate concerns.
 
 ## Affected Existing Features
 
