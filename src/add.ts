@@ -770,12 +770,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         fullDepth: options.fullDepth,
       });
     } else if (parsed.type === 'github' && !options.fullDepth) {
-      // Try blob-based fast install for GitHub sources
-      // Only enabled for allowlisted orgs; skip for --full-depth
-      const BLOB_ALLOWED_OWNERS = ['vercel', 'vercel-labs'];
       const ownerRepo = getOwnerRepo(parsed);
       const owner = ownerRepo?.split('/')[0]?.toLowerCase();
-      if (ownerRepo && owner && BLOB_ALLOWED_OWNERS.includes(owner)) {
+      if (ownerRepo && owner) {
         spinner.start('Fetching skills...');
         const token = getGitHubToken();
         blobResult = await tryBlobInstall(ownerRepo, {
