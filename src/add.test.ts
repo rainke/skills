@@ -82,12 +82,19 @@ Instructions here.
 
     // Create a target directory to install to
     const targetDir = join(testDir, 'project');
+    const configHome = join(testDir, 'xdg-config');
     mkdirSync(targetDir, { recursive: true });
 
-    const result = runCli(['add', testDir, '-y', '-g', '--agent', 'claude-code'], targetDir);
+    const result = runCli(['add', testDir, '-y', '-g', '--agent', 'claude-code'], targetDir, {
+      XDG_CONFIG_HOME: configHome,
+      HOME: testDir,
+      CLAUDE_CONFIG_DIR: join(testDir, '.claude'),
+      CODEX_HOME: join(testDir, '.codex'),
+    });
     expect(result.stdout).toContain('my-skill');
     expect(result.stdout).toContain('Done!');
     expect(result.exitCode).toBe(0);
+    expect(existsSync(join(configHome, 'skills', 'my-skill', 'SKILL.md'))).toBe(true);
   });
 
   it('should filter skills by name with --skill flag', () => {
@@ -490,12 +497,19 @@ This is a test skill for -y flag mode testing.
     );
 
     // Run with -y flag - should complete without hanging
-    const result = runCli(['add', testDir, '-g', '-y', '--skill', 'yes-flag-test-skill'], testDir);
+    const configHome = join(testDir, 'xdg-config');
+    const result = runCli(['add', testDir, '-g', '-y', '--skill', 'yes-flag-test-skill'], testDir, {
+      XDG_CONFIG_HOME: configHome,
+      HOME: testDir,
+      CLAUDE_CONFIG_DIR: join(testDir, '.claude'),
+      CODEX_HOME: join(testDir, '.codex'),
+    });
 
     // Should not contain the find-skills prompt
     expect(result.stdout).not.toContain('Install the find-skills skill');
     expect(result.stdout).not.toContain("One-time prompt - you won't be asked again");
     // Should complete successfully
     expect(result.exitCode).toBe(0);
+    expect(existsSync(join(configHome, 'skills', 'yes-flag-test-skill', 'SKILL.md'))).toBe(true);
   });
 });
