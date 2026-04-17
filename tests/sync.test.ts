@@ -10,9 +10,11 @@ describe('experimental_sync command', { timeout: 15000 }, () => {
   beforeEach(() => {
     testDir = join(tmpdir(), `skills-sync-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
+    process.env.XDG_CONFIG_HOME = testDir;
   });
 
   afterEach(() => {
+    delete process.env.XDG_CONFIG_HOME;
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }

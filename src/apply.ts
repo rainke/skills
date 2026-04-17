@@ -1,6 +1,12 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { agents, detectInstalledAgents, getUniversalAgents } from './agents.ts';
+import {
+  agents,
+  detectInstalledAgents,
+  getAgentConfig,
+  getUniversalAgents,
+  getValidAgentIds,
+} from './agents.ts';
 import { applyInstalledSkillForAgent, type InstallMode } from './installer.ts';
 import { getAllLockedSkills, type SkillLockEntry } from './skill-lock.ts';
 import type { AgentType } from './types.ts';
@@ -71,7 +77,7 @@ function matchesSource(entry: SkillLockEntry, sourceFilters: string[]): boolean 
 }
 
 async function resolveTargetAgents(options: ApplyOptions): Promise<AgentType[]> {
-  const validAgents = Object.keys(agents) as AgentType[];
+  const validAgents = getValidAgentIds() as AgentType[];
 
   if (options.all) {
     return validAgents;
@@ -99,11 +105,13 @@ async function resolveTargetAgents(options: ApplyOptions): Promise<AgentType[]> 
   }
 
   const choices = validAgents
-    .filter((agent) => !options.global || agents[agent].globalSkillsDir !== undefined)
+    .filter((agent) => !options.global || getAgentConfig(agent).globalSkillsDir !== undefined)
     .map((agent) => ({
       value: agent,
-      label: agents[agent].displayName,
-      hint: options.global ? agents[agent].globalSkillsDir || '' : agents[agent].skillsDir,
+      label: getAgentConfig(agent).displayName,
+      hint: options.global
+        ? getAgentConfig(agent).globalSkillsDir || ''
+        : getAgentConfig(agent).skillsDir,
     }));
 
   const selected = await p.multiselect({
@@ -192,7 +200,7 @@ export async function applyInstalledSkills(
     } else {
       for (const target of uniqueTargets) {
         p.log.message(
-          `  ${pc.cyan(agents[target.agent].displayName)} ${pc.dim('->')} ${pc.dim(target.path)}`
+          `  ${pc.cyan(getAgentConfig(target.agent).displayName)} ${pc.dim('->')} ${pc.dim(target.path)}`
         );
       }
     }
@@ -200,7 +208,7 @@ export async function applyInstalledSkills(
 
   for (const failed of failedPairs) {
     p.log.message(
-      `  ${pc.red('✗')} ${failed.skill} -> ${agents[failed.agent].displayName}: ${pc.dim(failed.error || 'Unknown error')}`
+      `  ${pc.red('✗')} ${failed.skill} -> ${getAgentConfig(failed.agent).displayName}: ${pc.dim(failed.error || 'Unknown error')}`
     );
   }
 

@@ -1,49 +1,4 @@
-export type AgentType =
-  | 'amp'
-  | 'antigravity'
-  | 'augment'
-  | 'bob'
-  | 'claude-code'
-  | 'openclaw'
-  | 'cline'
-  | 'codebuddy'
-  | 'codex'
-  | 'command-code'
-  | 'continue'
-  | 'cortex'
-  | 'crush'
-  | 'cursor'
-  | 'deepagents'
-  | 'droid'
-  | 'firebender'
-  | 'gemini-cli'
-  | 'github-copilot'
-  | 'goose'
-  | 'iflow-cli'
-  | 'junie'
-  | 'kilo'
-  | 'kimi-cli'
-  | 'kiro-cli'
-  | 'kode'
-  | 'mcpjam'
-  | 'mistral-vibe'
-  | 'mux'
-  | 'neovate'
-  | 'opencode'
-  | 'openhands'
-  | 'pi'
-  | 'qoder'
-  | 'qwen-code'
-  | 'replit'
-  | 'roo'
-  | 'trae'
-  | 'trae-cn'
-  | 'warp'
-  | 'windsurf'
-  | 'zencoder'
-  | 'pochi'
-  | 'adal'
-  | 'universal';
+export type AgentType = string;
 
 export interface Skill {
   name: string;
@@ -65,6 +20,20 @@ export interface AgentConfig {
   detectInstalled: () => Promise<boolean>;
   /** Whether to show this agent in the universal agents list. Defaults to true. */
   showInUniversalList?: boolean;
+  /** Whether this agent is built into the CLI instead of loaded from user config. */
+  builtin?: boolean;
+}
+
+export interface ConfiguredAgentInput {
+  name: string;
+  displayName: string;
+  projectSkillsDir?: string;
+  globalSkillsDir?: string;
+  showInUniversalList?: boolean;
+}
+
+export interface SkillsConfig {
+  agents?: ConfiguredAgentInput[];
 }
 
 export interface ParsedSource {

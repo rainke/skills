@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readdir, rm, lstat } from 'fs/promises';
 import { join } from 'path';
-import { agents, detectInstalledAgents } from './agents.ts';
+import { getAgentConfig, getValidAgentIds } from './agents.ts';
 import { track } from './telemetry.ts';
 import { getAllLockedSkills, removeSkillFromLock, getSkillFromLock } from './skill-lock.ts';
 import type { AgentType } from './types.ts';
@@ -59,7 +59,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
   // Validate agent options BEFORE prompting for skill selection
   if (options.agent && options.agent.length > 0) {
-    const validAgents = Object.keys(agents);
+    const validAgents = getValidAgentIds();
     const invalidAgents = options.agent.filter((a) => !validAgents.includes(a));
 
     if (invalidAgents.length > 0) {
@@ -108,7 +108,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
   } else {
     // When removing, we should target all known agents to ensure
     // ghost symlinks are cleaned up, even if the agent is not detected.
-    targetAgents = Object.keys(agents) as AgentType[];
+    targetAgents = getValidAgentIds() as AgentType[];
     spinner.stop(`Targeting ${targetAgents.length} potential agent(s)`);
   }
 
@@ -134,7 +134,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
 
   // Removing a repository-installed skill should clean up all agent links/copies,
   // regardless of which agents were explicitly specified.
-  const cleanupAgents = Object.keys(agents) as AgentType[];
+  const cleanupAgents = getValidAgentIds() as AgentType[];
 
   const results: {
     skill: string;
@@ -149,7 +149,7 @@ export async function removeCommand(skillNames: string[], options: RemoveOptions
       const canonicalPath = getRepositorySkillPath(skillName);
 
       for (const agentKey of cleanupAgents) {
-        const agent = agents[agentKey];
+        const agent = getAgentConfig(agentKey);
         const pathsToCleanup = new Set<string>();
         const sanitizedName = sanitizeName(skillName);
         if (agent.globalSkillsDir) {

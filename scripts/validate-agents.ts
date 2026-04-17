@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { homedir } from 'os';
-import { agents } from '../src/agents.ts';
+import { builtinAgents } from '../src/agents.ts';
 
 let hasErrors = false;
 
@@ -23,7 +23,7 @@ function error(message: string) {
 function checkDuplicateDisplayNames() {
   const displayNames = new Map<string, string[]>();
 
-  for (const [key, config] of Object.entries(agents)) {
+  for (const [key, config] of Object.entries(builtinAgents)) {
     const name = config.displayName.toLowerCase();
     if (!displayNames.has(name)) {
       displayNames.set(name, []);
@@ -56,7 +56,7 @@ function checkDuplicateSkillsDirs() {
   const skillsDirs = new Map<string, string[]>();
   const globalSkillsDirs = new Map<string, string[]>();
 
-  for (const [key, config] of Object.entries(agents)) {
+  for (const [key, config] of Object.entries(builtinAgents)) {
     if (!skillsDirs.has(config.skillsDir)) {
       skillsDirs.set(config.skillsDir, []);
     }

@@ -165,8 +165,8 @@ ${skillData.description}
 
   // Issue #225 part 1: Only installed agents should be attributed
   it('should only attribute skills to installed agents (issue #225)', async () => {
-    // Mock: only Amp is installed (not Kimi, even though they share .agents/skills)
-    vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['amp']);
+    // Mock: only OpenCode is installed (not GitHub Copilot, even though they share .agents/skills)
+    vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['opencode']);
 
     await createAppliedSkillDir(testDir, 'test-skill', {
       name: 'test-skill',
@@ -176,27 +176,37 @@ ${skillData.description}
     const skills = await listInstalledSkills({ global: false, cwd: testDir });
 
     expect(skills).toHaveLength(1);
-    // Should only show amp, not kimi-cli
-    expect(skills[0]!.agents).toContain('amp');
-    expect(skills[0]!.agents).not.toContain('kimi-cli');
+    // Should only show opencode, not github-copilot
+    expect(skills[0]!.agents).toContain('opencode');
+    expect(skills[0]!.agents).not.toContain('github-copilot');
 
     vi.restoreAllMocks();
   });
 
   // Issue #225 part 2: Skills in agent-specific directories should be found
   it('should find skills in agent-specific directories (issue #225)', async () => {
-    vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['cursor']);
+    vi.spyOn(agentsModule, 'detectInstalledAgents').mockResolvedValue(['claude-code']);
 
-    await createAppliedSkillDir(testDir, 'cursor-skill', {
-      name: 'cursor-skill',
-      description: 'A skill in cursor directory',
-    });
+    const skillDir = join(testDir, '.claude', 'skills', 'claude-skill');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: claude-skill
+description: A skill in claude directory
+---
+
+# claude-skill
+
+A skill in claude directory
+`
+    );
 
     const skills = await listInstalledSkills({ global: false, cwd: testDir });
 
     expect(skills).toHaveLength(1);
-    expect(skills[0]!.name).toBe('cursor-skill');
-    expect(skills[0]!.agents).toContain('cursor');
+    expect(skills[0]!.name).toBe('claude-skill');
+    expect(skills[0]!.agents).toContain('claude-code');
 
     vi.restoreAllMocks();
   });

@@ -8,6 +8,8 @@ import { installSkillForAgent, getCanonicalPath } from './installer.ts';
 import {
   detectInstalledAgents,
   agents,
+  getAgentConfig,
+  getValidAgentIds,
   getUniversalAgents,
   getNonUniversalAgents,
 } from './agents.ts';
@@ -198,7 +200,7 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
 
   // 3. Select agents
   let targetAgents: AgentType[];
-  const validAgents = Object.keys(agents);
+  const validAgents = getValidAgentIds();
   const universalAgents = getUniversalAgents();
 
   if (options.agent?.includes('*')) {
@@ -215,7 +217,7 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
   } else {
     spinner.start('Loading agents...');
     const installedAgents = await detectInstalledAgents();
-    const totalAgents = Object.keys(agents).length;
+    const totalAgents = getValidAgentIds().length;
     spinner.stop(`${totalAgents} agents`);
 
     if (installedAgents.length === 0) {
@@ -227,8 +229,8 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
 
         const otherChoices = otherAgents.map((a) => ({
           value: a,
-          label: agents[a].displayName,
-          hint: agents[a].skillsDir,
+          label: getAgentConfig(a).displayName,
+          hint: getAgentConfig(a).skillsDir,
         }));
 
         const selected = await searchMultiselect({
@@ -239,7 +241,7 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
             title: 'Universal (.agents/skills)',
             items: universalAgents.map((a) => ({
               value: a,
-              label: agents[a].displayName,
+              label: getAgentConfig(a).displayName,
             })),
           },
         });
@@ -264,8 +266,8 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
 
       const otherChoices = otherAgents.map((a) => ({
         value: a,
-        label: agents[a].displayName,
-        hint: agents[a].skillsDir,
+        label: getAgentConfig(a).displayName,
+        hint: getAgentConfig(a).skillsDir,
       }));
 
       const selected = await searchMultiselect({
@@ -276,7 +278,7 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
           title: 'Universal (.agents/skills)',
           items: universalAgents.map((a) => ({
             value: a,
-            label: agents[a].displayName,
+            label: getAgentConfig(a).displayName,
           })),
         },
       });
@@ -334,7 +336,7 @@ export async function runSync(args: string[], options: SyncOptions = {}): Promis
       results.push({
         skill: skill.name,
         packageName: skill.packageName,
-        agent: agents[agent].displayName,
+        agent: getAgentConfig(agent).displayName,
         success: result.success,
         path: result.path,
         canonicalPath: result.canonicalPath,

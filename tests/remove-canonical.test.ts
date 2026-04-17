@@ -18,7 +18,7 @@ describe('removeCommand canonical protection', () => {
     repositoryDir = join(tempDir, 'skills');
     await mkdir(repositoryDir, { recursive: true });
     await mkdir(join(tempDir, '.claude/skills'), { recursive: true });
-    await mkdir(join(tempDir, '.continue/skills'), { recursive: true });
+    await mkdir(join(tempDir, '.agents/skills'), { recursive: true });
   });
 
   afterEach(async () => {
@@ -31,17 +31,17 @@ describe('removeCommand canonical protection', () => {
     const skillName = 'test-skill';
     const canonicalPath = join(repositoryDir, skillName);
     const claudePath = join(tempDir, '.claude/skills', skillName);
-    const continuePath = join(tempDir, '.continue/skills', skillName);
+    const codexPath = join(tempDir, '.agents/skills', skillName);
 
     await mkdir(canonicalPath, { recursive: true });
     await writeFile(join(canonicalPath, 'SKILL.md'), '# Test');
     await symlink(canonicalPath, claudePath, 'junction');
-    await symlink(canonicalPath, continuePath, 'junction');
+    await symlink(canonicalPath, codexPath, 'junction');
 
     await removeCommand([skillName], { agent: ['claude-code'], yes: true });
 
     await expect(lstat(claudePath)).rejects.toThrow();
-    await expect(lstat(continuePath)).rejects.toThrow();
+    await expect(lstat(codexPath)).rejects.toThrow();
     await expect(lstat(canonicalPath)).rejects.toThrow();
   });
 

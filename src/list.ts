@@ -1,6 +1,6 @@
 import { homedir } from 'os';
 import type { AgentType } from './types.ts';
-import { agents } from './agents.ts';
+import { getAgentConfig, getValidAgentIds } from './agents.ts';
 import { listInstalledSkills, type InstalledSkill } from './installer.ts';
 import { getAllLockedSkills } from './skill-lock.ts';
 
@@ -70,7 +70,7 @@ export async function runList(args: string[]): Promise<void> {
   // Validate agent filter if provided
   let agentFilter: AgentType[] | undefined;
   if (options.agent && options.agent.length > 0) {
-    const validAgents = Object.keys(agents);
+    const validAgents = getValidAgentIds();
     const invalidAgents = options.agent.filter((a) => !validAgents.includes(a));
 
     if (invalidAgents.length > 0) {
@@ -129,7 +129,7 @@ export async function runList(args: string[]): Promise<void> {
       name: skill.name,
       path: skill.canonicalPath,
       scope: skill.scope,
-      agents: skill.agents.map((a) => agents[a].displayName),
+      agents: skill.agents.map((a) => getAgentConfig(a).displayName),
     }));
     console.log(JSON.stringify(jsonOutput, null, 2));
     return;
@@ -155,7 +155,7 @@ export async function runList(args: string[]): Promise<void> {
   function printSkill(skill: InstalledSkill, indent: boolean = false): void {
     const prefix = indent ? '  ' : '';
     const shortPath = shortenPath(skill.canonicalPath, cwd);
-    const agentNames = skill.agents.map((a) => agents[a].displayName);
+    const agentNames = skill.agents.map((a) => getAgentConfig(a).displayName);
     const agentInfo =
       skill.agents.length > 0 ? formatList(agentNames) : `${YELLOW}not linked${RESET}`;
     console.log(`${prefix}${CYAN}${skill.name}${RESET} ${DIM}${shortPath}${RESET}`);

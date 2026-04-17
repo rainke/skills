@@ -17,7 +17,7 @@ import { homedir, platform } from 'os';
 import { xdgConfig } from 'xdg-basedir';
 import type { Skill, AgentType, RemoteSkill } from './types.ts';
 import type { WellKnownSkill } from './providers/wellknown.ts';
-import { agents, detectInstalledAgents } from './agents.ts';
+import { agents, detectInstalledAgents, getAgentConfig, getValidAgentIds } from './agents.ts';
 import { AGENTS_DIR, SKILLS_SUBDIR } from './constants.ts';
 import { parseSkillMd } from './skills.ts';
 
@@ -95,7 +95,7 @@ export function getRepositorySkillPath(skillName: string): string {
  * agent installations should still resolve to the agent-facing path.
  */
 export function getAgentBaseDir(agentType: AgentType, global: boolean, cwd?: string): string {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const baseDir = global ? homedir() : cwd || process.cwd();
 
   if (global) {
@@ -227,7 +227,7 @@ export async function installSkillForAgent(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string; mode?: InstallMode } = {}
 ): Promise<InstallResult> {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const isGlobal = options.global ?? false;
   const cwd = options.cwd || process.cwd();
 
@@ -487,7 +487,7 @@ export async function applyInstalledSkillForAgent(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string; mode?: InstallMode } = {}
 ): Promise<InstallResult> {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const isGlobal = options.global ?? false;
   const installMode = options.mode ?? 'symlink';
 
@@ -565,7 +565,7 @@ export async function isSkillInstalled(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string } = {}
 ): Promise<boolean> {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const sanitized = sanitizeName(skillName);
 
   // Agent doesn't support global installation
@@ -596,7 +596,7 @@ export function getInstallPath(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string } = {}
 ): string {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const cwd = options.cwd || process.cwd();
   const sanitized = sanitizeName(skillName);
 
@@ -639,7 +639,7 @@ export async function installRemoteSkillForAgent(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string; mode?: InstallMode } = {}
 ): Promise<InstallResult> {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const isGlobal = options.global ?? false;
   const cwd = options.cwd || process.cwd();
   const installMode = options.mode ?? 'symlink';
@@ -748,7 +748,7 @@ export async function installWellKnownSkillForAgent(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string; mode?: InstallMode } = {}
 ): Promise<InstallResult> {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const isGlobal = options.global ?? false;
   const cwd = options.cwd || process.cwd();
   const installMode = options.mode ?? 'symlink';
@@ -873,7 +873,7 @@ export async function installBlobSkillForAgent(
   agentType: AgentType,
   options: { global?: boolean; cwd?: string; mode?: InstallMode } = {}
 ): Promise<InstallResult> {
-  const agent = agents[agentType];
+  const agent = getAgentConfig(agentType);
   const isGlobal = options.global ?? false;
   const cwd = options.cwd || process.cwd();
   const installMode = options.mode ?? 'symlink';
@@ -1032,7 +1032,7 @@ export async function listInstalledSkills(
 
     // Add each installed agent's skills directory
     for (const agentType of agentsToCheck) {
-      const agent = agents[agentType];
+      const agent = getAgentConfig(agentType);
       if (isGlobal && agent.globalSkillsDir === undefined) {
         continue;
       }
@@ -1047,10 +1047,10 @@ export async function listInstalledSkills(
     // skills were installed with `--agent <name>` but the agent is no longer
     // detected (e.g. ~/.openclaw was removed).  Only add dirs that actually
     // exist on disk to avoid unnecessary readdir errors.
-    const allAgentTypes = Object.keys(agents) as AgentType[];
+    const allAgentTypes = getValidAgentIds() as AgentType[];
     for (const agentType of allAgentTypes) {
       if (agentsToCheck.includes(agentType)) continue;
-      const agent = agents[agentType];
+      const agent = getAgentConfig(agentType);
       if (isGlobal && agent.globalSkillsDir === undefined) continue;
       const agentDir = isGlobal ? agent.globalSkillsDir! : join(cwd, agent.skillsDir);
       if (scopes.some((s) => s.path === agentDir && s.global === isGlobal)) continue;
@@ -1114,7 +1114,7 @@ export async function listInstalledSkills(
         const installedAgents: AgentType[] = [];
 
         for (const agentType of agentsToCheck) {
-          const agent = agents[agentType];
+          const agent = getAgentConfig(agentType);
 
           if (scope.global && agent.globalSkillsDir === undefined) {
             continue;

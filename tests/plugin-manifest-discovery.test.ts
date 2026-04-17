@@ -51,7 +51,7 @@ description: Skill discovered via manifest
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('manifest-skill');
+    expect(skills[0]?.name).toBe('manifest-skill');
   });
 
   it('should respect metadata.pluginRoot', async () => {
@@ -82,7 +82,7 @@ description: Test
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('pluginroot-skill');
+    expect(skills[0]?.name).toBe('pluginroot-skill');
   });
 
   it('should discover skills from plugin.json', async () => {
@@ -107,7 +107,7 @@ description: Test
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('single-plugin-skill');
+    expect(skills[0]?.name).toBe('single-plugin-skill');
   });
 
   it('should skip remote source objects', async () => {
@@ -249,7 +249,7 @@ description: Test
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('root-skill');
+    expect(skills[0]?.name).toBe('root-skill');
   });
 
   it('should discover skills from adjacent skills/ when plugin.json has no skills array', async () => {
@@ -276,7 +276,7 @@ description: Discovered from conventional skills/ directory
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('undeclared-skill');
+    expect(skills[0]?.name).toBe('undeclared-skill');
   });
 
   it('should discover skills from adjacent skills/ when plugin.json has empty skills array', async () => {
@@ -301,7 +301,7 @@ description: Test
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('empty-array-skill');
+    expect(skills[0]?.name).toBe('empty-array-skill');
   });
 
   it('should discover skills from marketplace plugin without skills array', async () => {
@@ -331,7 +331,7 @@ description: Found via conventional skills/ in plugin
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('auto-discovered');
+    expect(skills[0]?.name).toBe('auto-discovered');
   });
 
   it('should discover both explicit and conventional skills from same plugin', async () => {
@@ -417,7 +417,7 @@ description: Should not be discovered
       const skills = await discoverSkills(testDir);
       // Should only find the valid skill, not the traversal attempts
       expect(skills).toHaveLength(1);
-      expect(skills[0].name).toBe('valid-skill');
+      expect(skills[0]?.name).toBe('valid-skill');
     } finally {
       // Clean up outside directory
       rmSync(outsideDir, { recursive: true, force: true });
@@ -447,7 +447,7 @@ description: Safe skill in conventional location
     const skills = await discoverSkills(testDir);
     // Should only find the conventional skill
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('safe-skill');
+    expect(skills[0]?.name).toBe('safe-skill');
   });
 
   it('should reject paths without ./ prefix (per Claude Code convention)', async () => {
@@ -490,7 +490,7 @@ description: Found via standard location
     const skills = await discoverSkills(testDir);
     // Only the standard skill should be found, not the one behind invalid pluginRoot
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('standard-skill');
+    expect(skills[0]?.name).toBe('standard-skill');
   });
 
   it('should reject plugin sources without ./ prefix', async () => {
@@ -529,7 +529,7 @@ description: Should be found
 
     const skills = await discoverSkills(testDir);
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe('valid-skill');
+    expect(skills[0]?.name).toBe('valid-skill');
   });
 
   it('should reject skill paths without ./ prefix', async () => {

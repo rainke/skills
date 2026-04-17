@@ -2,7 +2,7 @@
  * Regression tests for symlink installs when canonical and agent paths match.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   mkdtemp,
   mkdir,
@@ -16,7 +16,6 @@ import {
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { agents } from '../src/agents.ts';
 import {
   applyInstalledSkillForAgent,
   getRepositorySkillPath,
@@ -57,7 +56,7 @@ describe('installer symlink regression', () => {
     const skillName = 'self-loop-skill';
 
     try {
-      const result = await installAndApply(root, projectDir, skillName, 'amp');
+      const result = await installAndApply(root, projectDir, skillName, 'opencode');
 
       expect(result.success).toBe(true);
       expect(result.symlinkFailed).toBeUndefined();
@@ -90,7 +89,7 @@ describe('installer symlink regression', () => {
       const preStats = await lstat(canonicalDir);
       expect(preStats.isSymbolicLink()).toBe(true);
 
-      const result = await installAndApply(root, projectDir, skillName, 'amp');
+      const result = await installAndApply(root, projectDir, skillName, 'opencode');
 
       expect(result.success).toBe(true);
 
@@ -159,23 +158,30 @@ describe('installer symlink regression', () => {
     const root = await mkdtemp(join(tmpdir(), 'add-skill-'));
     const projectDir = join(root, 'project');
     await mkdir(projectDir, { recursive: true });
-    const codexSkillsDir = agents.codex.globalSkillsDir!;
-    await mkdir(codexSkillsDir, { recursive: true });
-
     const skillName = 'codex-global-skill';
 
     try {
       process.env.XDG_CONFIG_HOME = root;
+      process.env.HOME = root;
+      process.env.CODEX_HOME = join(root, '.codex');
+
+      vi.resetModules();
+      const [{ agents: freshAgents }, installerModule] = await Promise.all([
+        import('../src/agents.ts'),
+        import('../src/installer.ts'),
+      ]);
+      const codexSkillsDir = freshAgents.codex!.globalSkillsDir!;
+      await mkdir(codexSkillsDir, { recursive: true });
 
       const skillDir = await makeSkillSource(root, skillName);
-      const installResult = await installSkillToRepository({
+      const installResult = await installerModule.installSkillToRepository({
         name: skillName,
         description: 'test',
         path: skillDir,
       });
       expect(installResult.success).toBe(true);
 
-      const result = await applyInstalledSkillForAgent(skillName, 'codex', {
+      const result = await installerModule.applyInstalledSkillForAgent(skillName, 'codex', {
         cwd: projectDir,
         mode: 'symlink',
         global: true,
@@ -191,6 +197,8 @@ describe('installer symlink regression', () => {
       expect(await readlink(installedPath)).toContain('skills/codex-global-skill');
     } finally {
       delete process.env.XDG_CONFIG_HOME;
+      delete process.env.HOME;
+      delete process.env.CODEX_HOME;
       await rm(root, { recursive: true, force: true });
     }
   });

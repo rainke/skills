@@ -33,6 +33,8 @@ import {
 import {
   detectInstalledAgents,
   agents,
+  getAgentConfig,
+  getValidAgentIds,
   getUniversalAgents,
   getNonUniversalAgents,
   isUniversalAgent,
@@ -191,9 +193,9 @@ function splitAgentsByType(agentTypes: AgentType[]): {
 
   for (const a of agentTypes) {
     if (isUniversalAgent(a)) {
-      universal.push(agents[a].displayName);
+      universal.push(getAgentConfig(a).displayName);
     } else {
-      symlinked.push(agents[a].displayName);
+      symlinked.push(getAgentConfig(a).displayName);
     }
   }
 
@@ -216,7 +218,7 @@ function buildAgentSummaryLines(targetAgents: AgentType[], installMode: InstallM
     }
   } else {
     // Copy mode - all agents get copies
-    const allNames = targetAgents.map((a) => agents[a].displayName);
+    const allNames = targetAgents.map((a) => getAgentConfig(a).displayName);
     lines.push(`  ${pc.dim('copy →')} ${formatList(allNames)}`);
   }
 
@@ -354,7 +356,8 @@ async function selectAgentsInteractive(options: {
   global?: boolean;
 }): Promise<AgentType[] | symbol> {
   // Filter out agents that don't support global installation when --global is used
-  const supportsGlobalFilter = (a: AgentType) => !options.global || agents[a].globalSkillsDir;
+  const supportsGlobalFilter = (a: AgentType) =>
+    !options.global || getAgentConfig(a).globalSkillsDir;
 
   const universalAgents = getUniversalAgents().filter(supportsGlobalFilter);
   const otherAgents = getNonUniversalAgents().filter(supportsGlobalFilter);
@@ -364,15 +367,15 @@ async function selectAgentsInteractive(options: {
     title: 'Universal (.agents/skills)',
     items: universalAgents.map((a) => ({
       value: a,
-      label: agents[a].displayName,
+      label: getAgentConfig(a).displayName,
     })),
   };
 
   // Other agents are selectable with their skillsDir as hint
   const otherChoices = otherAgents.map((a) => ({
     value: a,
-    label: agents[a].displayName,
-    hint: options.global ? agents[a].globalSkillsDir! : agents[a].skillsDir,
+    label: getAgentConfig(a).displayName,
+    hint: options.global ? getAgentConfig(a).globalSkillsDir! : getAgentConfig(a).skillsDir,
   }));
 
   // Get last selected agents (filter to only non-universal ones for initial selection)
@@ -533,7 +536,7 @@ async function handleWellKnownSkills(
   const summaryLines: string[] = [];
 
   if (options.agent && options.agent.length > 0) {
-    const validAgents = Object.keys(agents);
+    const validAgents = getValidAgentIds();
     const invalidAgents = options.agent.filter((agent) => !validAgents.includes(agent));
     if (invalidAgents.length > 0) {
       p.log.error(`Invalid agents: ${invalidAgents.join(', ')}`);
@@ -972,7 +975,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     }
 
     if (options.agent && options.agent.length > 0) {
-      const validAgents = Object.keys(agents);
+      const validAgents = getValidAgentIds();
       const invalidAgents = options.agent.filter((agent) => !validAgents.includes(agent));
       if (invalidAgents.length > 0) {
         p.log.error(`Invalid agents: ${invalidAgents.join(', ')}`);

@@ -85,9 +85,9 @@ This is a test skill.
       createSymlink('skill-one', claudeSkillsDir);
       createSymlink('skill-two', claudeSkillsDir);
 
-      const clineSkillsDir = createAgentSkillsDir('.cline');
-      createSymlink('skill-one', clineSkillsDir);
-      createSymlink('skill-three', clineSkillsDir);
+      const universalSkillsDir = createAgentSkillsDir('.agents');
+      createSymlink('skill-one', universalSkillsDir);
+      createSymlink('skill-three', universalSkillsDir);
     });
 
     it('should remove specific skill by name with -y flag', () => {
@@ -172,7 +172,7 @@ This is a test skill.
     beforeEach(() => {
       createTestSkill('test-skill');
       createAgentSkillsDir('.claude');
-      createAgentSkillsDir('.cline');
+      createAgentSkillsDir('.agents');
     });
 
     it('should show error for invalid agent name', () => {
@@ -192,7 +192,7 @@ This is a test skill.
 
     it('should accept multiple agent names', () => {
       const result = runCli(
-        ['remove', 'test-skill', '--agent', 'claude-code', 'cursor', '-y'],
+        ['remove', 'test-skill', '--agent', 'claude-code', 'codex', '-y'],
         testDir
       );
       expect(result.stdout).not.toContain('Invalid agents');
@@ -309,7 +309,7 @@ This is a test skill.
 
     it('should handle multiple values for --agent', () => {
       const result = runCli(
-        ['remove', 'parse-test-skill', '--agent', 'claude-code', 'cursor', '-y'],
+        ['remove', 'parse-test-skill', '--agent', 'claude-code', 'codex', '-y'],
         testDir
       );
       expect(result.stdout).not.toContain('Invalid agents');

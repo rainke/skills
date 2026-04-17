@@ -3,14 +3,14 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { agents } from '../src/agents.ts';
+import { builtinAgents } from '../src/agents.ts';
 
 const ROOT = join(import.meta.dirname, '..');
 const README_PATH = join(ROOT, 'README.md');
 const PACKAGE_PATH = join(ROOT, 'package.json');
 
 function generateAgentList(): string {
-  const agentList = Object.values(agents);
+  const agentList = Object.values(builtinAgents);
   const count = agentList.length;
   return `Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [${count - 4} more](#available-agents).`;
 }
@@ -31,7 +31,7 @@ function generateAvailableAgentsTable(): string {
     }
   >();
 
-  for (const [key, a] of Object.entries(agents)) {
+  for (const [key, a] of Object.entries(builtinAgents)) {
     const pathKey = `${a.skillsDir}|${a.globalSkillsDir}`;
     if (!pathGroups.has(pathKey)) {
       pathGroups.set(pathKey, {
@@ -70,7 +70,7 @@ function generateSkillDiscoveryPaths(): string {
     '- `skills/.system/`',
   ];
 
-  const agentPaths = [...new Set(Object.values(agents).map((a) => a.skillsDir))].map(
+  const agentPaths = [...new Set(Object.values(builtinAgents).map((a) => a.skillsDir))].map(
     (p) => `- \`.${p.startsWith('.') ? p.slice(1) : '/' + p}/\``
   );
 
@@ -79,7 +79,7 @@ function generateSkillDiscoveryPaths(): string {
 
 function generateKeywords(): string[] {
   const baseKeywords = ['cli', 'agent-skills', 'skills', 'ai-agents'];
-  const agentKeywords = Object.keys(agents);
+  const agentKeywords = Object.keys(builtinAgents);
   return [...baseKeywords, ...agentKeywords];
 }
 

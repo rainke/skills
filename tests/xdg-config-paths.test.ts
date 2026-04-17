@@ -1,62 +1,40 @@
-/**
- * Tests for XDG config path handling (cross-platform).
- *
- * These tests verify that agents using XDG Base Directory specification
- * (OpenCode, Amp, Goose) use ~/.config paths consistently across all platforms,
- * NOT platform-specific paths like ~/Library/Preferences on macOS.
- *
- * This is critical because OpenCode uses xdg-basedir which always returns
- * ~/.config (or $XDG_CONFIG_HOME if set), regardless of platform.
- * The skills CLI must match this behavior to install skills in the correct location.
- *
- * See: https://github.com/vercel-labs/skills/pull/66
- * See: https://github.com/vercel-labs/skills/issues/63
- */
-
-import { describe, it, expect } from 'vitest';
-import { homedir } from 'os';
+import { describe, it, expect, vi } from 'vitest';
+import { homedir, tmpdir } from 'os';
 import { join } from 'path';
-import { agents } from '../src/agents.ts';
+import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
 
-describe('XDG config paths', () => {
+async function importFreshAgents(tag: string) {
+  void tag;
+  vi.resetModules();
+  return import('../src/agents.ts');
+}
+
+describe('agent registry paths', () => {
   const home = homedir();
 
-  describe('OpenCode', () => {
-    it('uses ~/.config/opencode/skills for global skills (not ~/Library/Preferences)', () => {
-      const expected = join(home, '.config', 'opencode', 'skills');
-      expect(agents.opencode.globalSkillsDir).toBe(expected);
+  describe('built-in agents', () => {
+    it('uses ~/.agents/skills for OpenCode global skills', async () => {
+      const { agents } = await importFreshAgents('opencode');
+      const expected = join(home, '.agents', 'skills');
+      expect(agents.opencode!.globalSkillsDir).toBe(expected);
     });
 
-    it('does NOT use platform-specific paths like ~/Library/Preferences', () => {
-      expect(agents.opencode.globalSkillsDir).not.toContain('Library');
-      expect(agents.opencode.globalSkillsDir).not.toContain('Preferences');
-      expect(agents.opencode.globalSkillsDir).not.toContain('AppData');
-    });
-  });
-
-  describe('Amp', () => {
-    it('uses ~/.config/agents/skills for global skills', () => {
-      const expected = join(home, '.config', 'agents', 'skills');
-      expect(agents.amp.globalSkillsDir).toBe(expected);
+    it('does not use platform-specific OpenCode config paths', async () => {
+      const { agents } = await importFreshAgents('opencode-platform');
+      expect(agents.opencode!.globalSkillsDir).not.toContain('Library');
+      expect(agents.opencode!.globalSkillsDir).not.toContain('Preferences');
+      expect(agents.opencode!.globalSkillsDir).not.toContain('AppData');
     });
 
-    it('does NOT use platform-specific paths', () => {
-      expect(agents.amp.globalSkillsDir).not.toContain('Library');
-      expect(agents.amp.globalSkillsDir).not.toContain('Preferences');
-      expect(agents.amp.globalSkillsDir).not.toContain('AppData');
-    });
-  });
-
-  describe('Goose', () => {
-    it('uses ~/.config/goose/skills for global skills', () => {
-      const expected = join(home, '.config', 'goose', 'skills');
-      expect(agents.goose.globalSkillsDir).toBe(expected);
-    });
-
-    it('does NOT use platform-specific paths', () => {
-      expect(agents.goose.globalSkillsDir).not.toContain('Library');
-      expect(agents.goose.globalSkillsDir).not.toContain('Preferences');
-      expect(agents.goose.globalSkillsDir).not.toContain('AppData');
+    it('keeps only the four built-in agents by default', async () => {
+      const { builtinAgents, getValidAgentIds } = await importFreshAgents('builtins');
+      expect(Object.keys(builtinAgents).sort()).toEqual([
+        'claude-code',
+        'codex',
+        'github-copilot',
+        'opencode',
+      ]);
+      expect(getValidAgentIds().sort()).toEqual(Object.keys(builtinAgents).sort());
     });
   });
 
@@ -79,15 +57,75 @@ describe('XDG config paths', () => {
     });
   });
 
-  describe('non-XDG agents', () => {
-    it('cursor uses ~/.cursor/skills (home-based, not XDG)', () => {
-      const expected = join(home, '.cursor', 'skills');
-      expect(agents.cursor.globalSkillsDir).toBe(expected);
+  describe('configured agents', () => {
+    it('loads configured agents from ~/.config/skills/config.json and expands ~', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'skills-config-'));
+
+      try {
+        process.env.XDG_CONFIG_HOME = root;
+        await mkdir(join(root, 'skills'), { recursive: true });
+        await writeFile(
+          join(root, 'skills', 'config.json'),
+          JSON.stringify(
+            {
+              agents: [
+                {
+                  name: 'cursor',
+                  displayName: 'Cursor',
+                  projectSkillsDir: '.agents/skills',
+                  globalSkillsDir: '~/.cursor/skills',
+                },
+                {
+                  name: 'custom-agent',
+                  displayName: 'Custom Agent',
+                  projectSkillsDir: '.custom/skills',
+                },
+              ],
+            },
+            null,
+            2
+          )
+        );
+
+        const { agents, getUniversalAgents, getNonUniversalAgents } =
+          await importFreshAgents('configured');
+
+        expect(agents.cursor!.globalSkillsDir).toBe(join(home, '.cursor', 'skills'));
+        expect(agents.cursor!.skillsDir).toBe('.agents/skills');
+        expect(getUniversalAgents()).toContain('cursor');
+        expect(getNonUniversalAgents()).toContain('custom-agent');
+      } finally {
+        delete process.env.XDG_CONFIG_HOME;
+        await rm(root, { recursive: true, force: true });
+      }
     });
 
-    it('cline uses ~/.agents/skills (home-based, not XDG)', () => {
-      const expected = join(home, '.agents', 'skills');
-      expect(agents.cline.globalSkillsDir).toBe(expected);
+    it('ignores configured agents that conflict with built-ins', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'skills-config-'));
+
+      try {
+        process.env.XDG_CONFIG_HOME = root;
+        await mkdir(join(root, 'skills'), { recursive: true });
+        await writeFile(
+          join(root, 'skills', 'config.json'),
+          JSON.stringify({
+            agents: [
+              {
+                name: 'codex',
+                displayName: 'Custom Codex',
+                projectSkillsDir: '.custom/skills',
+              },
+            ],
+          })
+        );
+
+        const { agents } = await importFreshAgents('conflict');
+        expect(agents.codex!.displayName).toBe('Codex');
+        expect(agents.codex!.skillsDir).toBe('.agents/skills');
+      } finally {
+        delete process.env.XDG_CONFIG_HOME;
+        await rm(root, { recursive: true, force: true });
+      }
     });
   });
 });
